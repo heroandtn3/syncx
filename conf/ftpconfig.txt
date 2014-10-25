@@ -1,0 +1,5 @@
+[ftpserver]
+	ftpserver = "127.0.0.1"
+	ftpuser = "hoank"
+	ftppass = "123456"
+	
