@@ -48,7 +48,7 @@ class SendFile(threading.Thread):
         localdata = open(file, "rb")
         self.ftp.storbinary('STOR', file, localdata, 1024)
         localdata.close()
-        print "Done"
+        print "Done. Store in: ",dir
         dis_connect()
 
 
