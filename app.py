@@ -50,4 +50,4 @@ if __name__ == "__main__":
     path = sys.argv[1] if len(sys.argv) > 1 else '.'
     handler = MyFileHandler()
     #monitor.watch(path, handler)
-    handler.on_created("hoank", "E:\\")
+    handler.on_created("requirements.txt", "E:\\")

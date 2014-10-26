@@ -9,14 +9,14 @@ class CNewFile(object):
 
     def newfile(self, filepath, directory):
         s = "Create file" + filepath + " " + directory
-        sFile.start_sendfile_to_other("requirements.txt", "C:\\")
+        sFile.start_sendfile_to_other(filepath, directory)
         print s
 
         return
 
     def deletefile(self, filepath, directory):
         #delete file
-        return
+        returnfi
 
     def modifiedfile(self, filepath, directory):
         #modified file
