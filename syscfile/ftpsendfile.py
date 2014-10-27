@@ -37,6 +37,9 @@ class SendFile(threading.Thread):
     def dis_connect(self):
         self.ftp.quit()
 
+    def deleteFile(self, file, dir):
+        self.connect()
+        self.ftp.delete(file)
 
     def start_sendfile_to_other(self, file, dir):
         """
@@ -49,10 +52,11 @@ class SendFile(threading.Thread):
        # self.ftp.cwd()
 
         localdata = open(file, "rb")
-        self.ftp.storbinary('STOR '+ file, localdata, 1024)
+        self.ftp.mkd("/hoank2")
+        self.ftp.storbinary('STOR /hoank2/'+ file, localdata, 1024)
         localdata.close()
         print "Done. Store in: ",dir
-        self.dis_connect();
+        #self.dis_connect();
 
 
 

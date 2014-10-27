@@ -12,11 +12,9 @@ class CNewFile(object):
         sFile.start_sendfile_to_other(filepath, directory)
         print s
 
-        return
-
     def deletefile(self, filepath, directory):
         #delete file
-        returnfi
+        sFile.deleteFile(filepath)
 
     def modifiedfile(self, filepath, directory):
         #modified file

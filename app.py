@@ -26,12 +26,18 @@ class MyFileHandler(monitor.FileHandler):
     def on_modified(self, src_path, is_directory):
         # TODO: implement this
         logging.info('On modified: %s', src_path)
-        sfile.modifiedfile(src_path, is_directory)
+        """
+        if file modifed then
+            cach 1: extent created new file
+            cach 2: thuc hien sau
+        """
+        sfile.newfile(src_path, is_directory)
 
 
     def on_moved(self, src_path, dest_path, is_directory):
         # TODO: implement this
         logging.info('On moved: %s to %s', src_path, dest_path)
+        #send move file client to server
         sfile.movedfile(src_path, is_directory)
 
 
