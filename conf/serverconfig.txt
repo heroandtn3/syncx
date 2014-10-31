@@ -1,0 +1,4 @@
+[SERVER]
+	host = "127.0.0.1"
+	port = 6969
+	hostmater = "127.0.0.1"

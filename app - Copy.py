@@ -5,7 +5,6 @@ import file_monitor as monitor
 from syscfile import pnewfile
 import ServerSyncs
 
-server = ServerSyncs.ServerSync()
 sfile = pnewfile.CNewFile()
 
 class MyFileHandler(monitor.FileHandler):
@@ -17,7 +16,6 @@ class MyFileHandler(monitor.FileHandler):
     def on_created(self, src_path, is_directory):
         # TODO: implement this
         logging.info('On created: %s', src_path)
-        print src_path
         sfile.newfile(src_path, is_directory)
 
     def on_deleted(self, src_path, is_directory):
@@ -56,9 +54,8 @@ if __name__ == "__main__":
     )
 
     # start watch file changing
-
-    path = sys.argv[1] if len(sys.argv) > 1 else '.'
+    #path = sys.argv[1] if len(sys.argv) > 1 else '.'
     handler = MyFileHandler()
     #monitor.watch(path, handler)
-    server.listen()
-    #handler.on_created("requirements.txt", "E:\\")
+    #server.listen()
+    handler.on_created("NET - 1.pdf", "E:\\")

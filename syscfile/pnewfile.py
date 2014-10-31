@@ -1,7 +1,6 @@
 import os
-import ftpsendfile
-
-sFile = ftpsendfile.SendFile()
+import ServerSyncs
+server = ServerSyncs.SendFile()
 class CNewFile(object):
     def __init__(self):
         self.filepath = ""
@@ -9,8 +8,8 @@ class CNewFile(object):
 
     def newfile(self, filepath, directory):
         s = "Create file" + filepath + " " + directory
-        sFile.start_sendfile_to_other(filepath, directory)
         print s
+        server.sendfile(filepath)
 
     def deletefile(self, filepath, directory):
         #delete file
