@@ -25,6 +25,9 @@ class SocketFileServer(object):
         self.port = port
         self.working_dir = working_dir
 
+        if not os.path.exists(working_dir):
+            os.mkdir(working_dir)
+
     def __real_path(self, src_path):
         """Remove working folder from src_path."""
         return os.sep.join(src_path.split(os.sep)[1:])
