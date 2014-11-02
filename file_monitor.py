@@ -2,6 +2,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 import time
 import logging
+import os
 
 class FileHandler():
     """
@@ -9,16 +10,17 @@ class FileHandler():
     """
 
     def on_created(self, src_path, is_directory):
-        logging.info('On created: %s', src_path)
+        logging.info('On created: "%s", directory: %s', src_path, is_directory)
 
     def on_deleted(self, src_path, is_directory):
-        logging.info('On deleted: %s', src_path)
+        logging.info('On deleted: "%s", directory: %s', src_path, is_directory)
 
     def on_modified(self, src_path, is_directory):
-        logging.info('On modified: %s', src_path)
+        logging.info('On modified: "%s", directory: %s', src_path, is_directory)
 
     def on_moved(self, src_path, dest_path, is_directory):
-        logging.info('On moved: %s to %s', src_path, dest_path)
+        logging.info('On moved: "%s" to "%s", directory %s', 
+                      src_path, dest_path, is_directory)
 
 
 class XFileSystemEventHandler(FileSystemEventHandler):
