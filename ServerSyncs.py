@@ -29,25 +29,37 @@ class ServerSync(object):
             self.soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.soc.bind((self.hostmaster, int(self.port)))
         except socket.error as msg:
-            print 'Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
+            logging.info('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
             sys.exit()
 
-    def listen(self):
+    def listen(self, path):
         self.soc.listen(10)
 
 
         while True:
-            print "listening for connections, on PORT: ", self.port
+            print ("listening for connections, on PORT: ", self.port)
             self.conn, self.addr = self.soc.accept()
             inputready,outputready,exceptready \
                       = select.select ([self.conn],[self.conn],[])
-            data = self.conn.recv(1024)
-            data = data.split("|")
-            if data[0] =="syncs" and data[1] == "filename" and data[3] == "filesize":
-                filename = data[2]
-                filesize = int(data[4])
-                self.conn.send("syncs|ok")
-                f = open("E:\\" + filename, "wb")
+            print ("Connect by", self.addr)
+            datarecv = ""
+            while 1:
+                data = self.conn.recv(1024)
+                datarecv += data.decode('utf-8')
+                if len(datarecv) > 0:
+                    break
+
+            datarecv = datarecv.split("|")
+            if datarecv[0] =="syncs" and datarecv[1] == "filename" and datarecv[3] == "filesize":
+                #Get file path
+                filelist = datarecv[2].split("\\")
+                #tach lay file name
+                filename = filelist[len(filelist) - 1]
+
+                filesize = int(datarecv[4])
+
+                self.conn.send("syncs|ok".encode('utf-8'))
+                f = open(path + filename, "wb")
                 byterecv = 0
                 while 1:
                     if byterecv == filesize:
@@ -58,7 +70,7 @@ class ServerSync(object):
                     f.write(buff)
                     byterecv += len(buff)
                 f.close()
-                print "send file success"
+                print ("send file success")
 
 
         return
@@ -70,17 +82,25 @@ class SendFile(object):
         pass
     def sendfile(self, lpFilePath):
         sc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sc.connect(("127.0.0.1", 6969))
+        conf = ConfigObj("conf/serverconfig.txt")
+        hostmt = conf["SERVER"]["hostmater"]
+        port = conf["SERVER"]["port"]
+
+        sc.connect((hostmt, int(port)))
         filesize = os.path.getsize(lpFilePath)
         datasend = "syncs|filename|" + lpFilePath + "|filesize|" + str(filesize) + "|\r\n"
-        print datasend
+        print ("hoank")
+        print (datasend)
+        logging.info(datasend)
         datalen = len(datasend)
         while True:
-            lSend = sc.send(datasend)
+            lSend = sc.send(datasend.encode('utf-8'))
             if lSend == datalen:
                 break
         datarecv = sc.recv(1024)
-        print datarecv
+        datarecv = datarecv.decode('utf-8')
+
+
         if datarecv == "syncs|ok":
             f = open(lpFilePath, "rb")
             byteSend = 0

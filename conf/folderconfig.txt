@@ -1,0 +1,3 @@
+[FOLDER]
+	server1 = "E:\\sync1\\"
+	server2 = "E:\\sync2\\"

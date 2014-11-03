@@ -6,20 +6,18 @@ class CNewFile(object):
         self.filepath = ""
         self.directory = ""
 
-    def newfile(self, filepath, directory):
-        s = "Create file" + filepath + " " + directory
-        print s
+    def new_file(self, filepath, directory):
         server.sendfile(filepath)
 
-    def deletefile(self, filepath, directory):
+    def delete_file(self, filepath, directory):
         #delete file
         sFile.deleteFile(filepath)
 
-    def modifiedfile(self, filepath, directory):
+    def modified_file(self, filepath, directory):
         #modified file
         return
 
-    def movedfile(self, filepath, dest_path, directory):
+    def moved_file(self, filepath, dest_path, directory):
         #moved file
 
         return
