@@ -29,9 +29,9 @@ class SocketFileServer(object):
         if not os.path.exists(working_dir):
             os.mkdir(working_dir)
 
-    def __real_path(self, src_path):
-        """Remove working folder from src_path."""
-        return os.sep.join(src_path.split(os.sep)[1:])
+    def __get_absolute_path(self, src_path):
+        """Return absolute path by adding working_dir prefix to `src_path`."""
+        return os.path.join(self.working_dir, src_path)
 
     def listen(self):
         """
@@ -70,21 +70,24 @@ class SocketFileServer(object):
                 datar += data.decode('utf-8')
                 if len(datar) > 0:
                     break
-            logging.info(datar)
+            logging.info('datar %s', datar)
             datar = datar.split("|")
 
             if (datar[0] == "syncs" and datar[1] == "delete"): #delete
-                if os.path.isdir(os.path.join(self.working_dir, datar[2])):
-                    shutil.rmtree(os.path.join(self.working_dir, datar[2]))
+                src_path = self.__get_absolute_path(datar[2])
+                if os.path.isdir(src_path):
+                    shutil.rmtree(src_path)
                 else:
-                    os.remove(os.path.join(self.working_dir, datar[2]))
+                    #TODO: check if src_path is exist or not
+                    os.remove(src_path)
                 self.conn.send("delete|ok".encode("utf-8"))
                 logging.info("delete success")
 
             if (datar[0] == "syncs" and datar[1] == "create"): #Create
                 if (datar[2] == "1"): #Create directory
-                    if not os.path.exists(os.path.join(self.working_dir, datar[3])):
-                        os.makedirs(os.path.join(self.working_dir, datar[3]))
+                    dir_path = self.__get_absolute_path(datar[3])
+                    if not os.path.exists(dir_path):
+                        os.makedirs(dir_path)
                     logging.info("Create directory success")
                     self.conn.send("directory|ok".encode("utf-8"));
                 if (datar[2] == "2"): #Create file
@@ -99,15 +102,13 @@ class SocketFileServer(object):
                     datarecv = datarecv.split("|")
 
                     if datarecv[0] =="syncs" and datarecv[1] == "filename" and datarecv[3] == "filesize":
-
-                        # get file name
-                        file_path = self.__real_path(datarecv[2])
-                        logging.info(file_path)
+                        file_path = self.__get_absolute_path(datarecv[2])
+                        logging.info('Receiving %s', file_path)
 
                         filesize = int(datarecv[4])
 
                         self.conn.send("syncs|ok".encode('utf-8'))
-                        f = open(os.path.join(self.working_dir, file_path), "wb")
+                        f = open(file_path, "wb")
                         byterecv = 0
 
                         while 1:
@@ -119,7 +120,7 @@ class SocketFileServer(object):
                             f.write(buff)
                             byterecv += len(buff)
                         f.close()
-                        logging.info("Received file %s", file_path)
+                        logging.info("Saved file %s", file_path)
 
     def senddata(self):
         return
@@ -129,19 +130,24 @@ class SocketFileClient(object):
     """
     Use as a socket client for sending data.
     """
-    def __init__(self, host, port):
+    def __init__(self, host, port, working_dir):
         self.host = host
         self.port = port
+        self.working_dir = working_dir
 
         # initialize socket connection
         self.sc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sc.connect((host, int(port)))
 
+    def __get_absolute_path(self, src_path):
+        """Return absolute path by adding working_dir prefix to `src_path`."""
+        return os.path.join(self.working_dir, src_path)
+
     def on_created(self, src_path, is_directory):
+        abs_src_path = self.__get_absolute_path(src_path)
+
         if is_directory:
-            #TODO: create new directory
-            directory = src_path[src_path.find("\\") + 1 : len(src_path)]
-            buffsend = "syncs|create|1|" + directory
+            buffsend = "syncs|create|1|" + src_path
             logging.info(buffsend)
             self.sc.send(buffsend.encode('utf-8'))
 
@@ -154,7 +160,7 @@ class SocketFileClient(object):
             buffsend = "syncs|create|2"
             self.sc.send(buffsend.encode("utf-8"))
 
-            filesize = os.path.getsize(src_path)
+            filesize = os.path.getsize(abs_src_path)
             datasend = "syncs|filename|" + src_path + "|filesize|" + str(filesize)
 
             logging.info(datasend)
@@ -168,7 +174,7 @@ class SocketFileClient(object):
 
             logging.info(datarecv)
             if datarecv == "syncs|ok":
-                f = open(src_path, "rb")
+                f = open(abs_src_path, "rb")
                 byteSend = 0
                 while 1:
                     if byteSend == filesize:
@@ -180,8 +186,7 @@ class SocketFileClient(object):
 
 
     def on_deleted(self, src_path, is_directory):
-        directory = src_path[src_path.find("\\") + 1 : len(src_path)]
-        buffsend = "syncs|delete|" + directory
+        buffsend = "syncs|delete|" + src_path
         logging.info(buffsend)
         self.sc.send(buffsend.encode("utf-8"))
 
@@ -194,7 +199,6 @@ class SocketFileClient(object):
 
 
     def on_modified(self, src_path, is_directory):
-
         pass
 
     def on_moved(self, src_path, dest_path, is_directory):
