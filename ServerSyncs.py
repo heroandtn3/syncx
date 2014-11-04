@@ -12,6 +12,7 @@
 import os
 import os.path
 import socket
+import shutil
 import sys
 import select
 import json
@@ -41,8 +42,7 @@ class SocketFileServer(object):
                 create|1|: directory "syncs|create|1|directory"
                 create|2|: file      "syncs|create|2|"
             delete: Delete file
-                syncs|delete|1|directory
-                syncs|delete|2|file
+                syncs|delete|directory
             modifed: modifed file
                 syncs|modifed|1|directory
                 syncs|modifed|2|file
@@ -74,11 +74,12 @@ class SocketFileServer(object):
             datar = datar.split("|")
 
             if (datar[0] == "syncs" and datar[1] == "delete"): #delete
-                if (datar[2] == "1"): #delete directory
-                    if os.path.exists(os.path.join(self.working_dir, datar[3])):
-                        os.rmdir(os.path.join(self.working_dir, datar[3]))
-                    self.conn.send("delete|ok".encode("utf-8"))
-                    logging.info("delete success")
+                if os.path.isdir(os.path.join(self.working_dir, datar[2])):
+                    shutil.rmtree(os.path.join(self.working_dir, datar[2]))
+                else:
+                    os.remove(os.path.join(self.working_dir, datar[2]))
+                self.conn.send("delete|ok".encode("utf-8"))
+                logging.info("delete success")
 
             if (datar[0] == "syncs" and datar[1] == "create"): #Create
                 if (datar[2] == "1"): #Create directory
@@ -179,22 +180,21 @@ class SocketFileClient(object):
 
 
     def on_deleted(self, src_path, is_directory):
-        if is_directory:
-            directory = src_path[src_path.find("\\") + 1 : len(src_path)]
-            buffsend = "syncs|delete|1" + directory
-            logging.info(buffsend)
-            self.sc.send(buffsend.encode("utf-8"))
+        directory = src_path[src_path.find("\\") + 1 : len(src_path)]
+        buffsend = "syncs|delete|" + directory
+        logging.info(buffsend)
+        self.sc.send(buffsend.encode("utf-8"))
 
-            buffrecv = self.sc.recv(1024)
-            buffrecv = buffrecv.decode('utf-8')
-            if (buffrecv == "delete|ok"):
-                logging.info("send directory success")
+        buffrecv = self.sc.recv(1024)
+        buffrecv = buffrecv.decode('utf-8')
+        if (buffrecv == "delete|ok"):
+            logging.info("send directory success")
         else:
             pass
 
 
-
     def on_modified(self, src_path, is_directory):
+
         pass
 
     def on_moved(self, src_path, dest_path, is_directory):
