@@ -79,11 +79,13 @@ class SocketFileServer(object):
                     shutil.rmtree(src_path)
                 else:
                     #TODO: check if src_path is exist or not
-                    os.remove(src_path)
+                    if os.path.isfile(src_path):
+                        os.remove(src_path)
                 self.conn.send("delete|ok".encode("utf-8"))
                 logging.info("delete success")
 
             if (datar[0] == "syncs" and datar[1] == "create"): #Create
+                self.conn.send("create|ok".encode("utf-8"))
                 if (datar[2] == "1"): #Create directory
                     dir_path = self.__get_absolute_path(datar[3])
                     if not os.path.exists(dir_path):
@@ -106,6 +108,7 @@ class SocketFileServer(object):
                         logging.info('Receiving %s', file_path)
 
                         filesize = int(datarecv[4])
+                        logging.info(filesize)
 
                         self.conn.send("syncs|ok".encode('utf-8'))
                         f = open(file_path, "wb")
@@ -160,6 +163,11 @@ class SocketFileClient(object):
             buffsend = "syncs|create|2"
             self.sc.send(buffsend.encode("utf-8"))
 
+            buffrecv = self.sc.recv(1024)
+            buffrecv = buffrecv.decode('utf-8')
+            if (buffrecv == "create|ok"):
+                logging.info("create success")
+
             filesize = os.path.getsize(abs_src_path)
             datasend = "syncs|filename|" + src_path + "|filesize|" + str(filesize)
 
@@ -199,6 +207,7 @@ class SocketFileClient(object):
 
 
     def on_modified(self, src_path, is_directory):
+        self.on_created(src_path, is_directory)
         pass
 
     def on_moved(self, src_path, dest_path, is_directory):
