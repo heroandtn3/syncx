@@ -50,7 +50,6 @@ class SocketFileServer(object):
                 syncs|moved|1|directory
                 syncs|moved|2|file
 
-
         """
         self.soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
