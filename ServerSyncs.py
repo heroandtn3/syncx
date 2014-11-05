@@ -16,6 +16,7 @@ import shutil
 import sys
 import select
 import json
+import threading
 import logging
 from configobj import ConfigObj
 
@@ -53,76 +54,91 @@ class SocketFileServer(object):
         """
         self.soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.soc.bind((self.host, int(self.port)))
+        try:
+            self.soc.bind((self.host, int(self.port)))
+        except socket.error as msg:
+            logging.info('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
+
         self.soc.listen(10)
 
         logging.info("listening for connections, on PORT: %s", self.port)
-        self.conn, self.addr = self.soc.accept()
-        inputready,outputready,exceptready \
-            = select.select ([self.conn],[self.conn],[])
-        logging.info("Connect by %s", self.addr)
+        while 1:
+            self.conn, self.addr = self.soc.accept()
+            inputready,outputready,exceptready \
+                = select.select ([self.conn],[self.conn],[])
+            logging.info("Connect by %s", self.addr)
+            thread = threading.Thread(target = self.tranfer)
+            thread.start()
 
-        while True:
-            datar = ""
-            while 1:
-                data = self.conn.recv(1024)
-                datar += data.decode('utf-8')
-                if len(datar) > 0:
-                    break
-            logging.info('datar %s', datar)
-            datar = datar.split("|")
 
-            if (datar[0] == "syncs" and datar[1] == "delete"): #delete
-                src_path = self.__get_absolute_path(datar[2])
-                if os.path.isdir(src_path):
-                    shutil.rmtree(src_path)
-                else:
-                    #TODO: check if src_path is exist or not
-                    if os.path.isfile(src_path):
-                        os.remove(src_path)
-                self.conn.send("delete|ok".encode("utf-8"))
-                logging.info("delete success")
+    def tranfer(self):
+        try:
+            while True:
+                datar = ""
+                while 1:
+                    data = self.conn.recv(1024)
+                    datar += data.decode('utf-8')
+                    if len(datar) > 0:
+                        break
+                logging.info('datar %s', datar)
+                datar = datar.split("|")
 
-            if (datar[0] == "syncs" and datar[1] == "create"): #Create
-                self.conn.send("create|ok".encode("utf-8"))
-                if (datar[2] == "1"): #Create directory
-                    dir_path = self.__get_absolute_path(datar[3])
-                    if not os.path.exists(dir_path):
-                        os.makedirs(dir_path)
-                    logging.info("Create directory success")
-                    self.conn.send("directory|ok".encode("utf-8"));
-                if (datar[2] == "2"): #Create file
-                    logging.info("Create file")
-                    datarecv = ""
-                    while 1:
-                        data = self.conn.recv(1024)
-                        datarecv += data.decode('utf-8')
-                        if len(datarecv) > 0:
-                            break
+                if (datar[0] == "syncs" and datar[1] == "delete"): #delete
+                    src_path = self.__get_absolute_path(datar[2])
+                    if os.path.isdir(src_path):
+                        shutil.rmtree(src_path)
+                    else:
+                        #TODO: check if src_path is exist or not
+                        if os.path.isfile(src_path):
+                            os.remove(src_path)
+                    self.conn.send("delete|ok".encode("utf-8"))
+                    logging.info("delete success")
 
-                    datarecv = datarecv.split("|")
-
-                    if datarecv[0] =="syncs" and datarecv[1] == "filename" and datarecv[3] == "filesize":
-                        file_path = self.__get_absolute_path(datarecv[2])
-                        logging.info('Receiving %s', file_path)
-
-                        filesize = int(datarecv[4])
-                        logging.info(filesize)
-
-                        self.conn.send("syncs|ok".encode('utf-8'))
-                        f = open(file_path, "wb")
-                        byterecv = 0
-
+                if (datar[0] == "syncs" and datar[1] == "create"): #Create
+                    self.conn.send("create|ok".encode("utf-8"))
+                    if (datar[2] == "1"): #Create directory
+                        dir_path = self.__get_absolute_path(datar[3])
+                        if not os.path.exists(dir_path):
+                            os.makedirs(dir_path)
+                        logging.info("Create directory success")
+                        self.conn.send("directory|ok".encode("utf-8"));
+                    if (datar[2] == "2"): #Create file
+                        logging.info("Create file")
+                        datarecv = ""
                         while 1:
-                            if byterecv == filesize:
+                            data = self.conn.recv(1024)
+                            datarecv += data.decode('utf-8')
+                            if len(datarecv) > 0:
                                 break
-                            buff = self.conn.recv(1024)
-                            if len(buff) == 0:
-                                break
-                            f.write(buff)
-                            byterecv += len(buff)
-                        f.close()
-                        logging.info("Saved file %s", file_path)
+
+                        datarecv = datarecv.split("|")
+
+                        if datarecv[0] =="syncs" and datarecv[1] == "filename" and datarecv[3] == "filesize":
+                            file_path = self.__get_absolute_path(datarecv[2])
+                            logging.info('Receiving %s', file_path)
+
+                            filesize = int(datarecv[4])
+                            logging.info(filesize)
+
+                            self.conn.send("syncs|ok".encode('utf-8'))
+                            f = open(file_path, "wb")
+                            byterecv = 0
+
+                            while 1:
+                                if byterecv == filesize:
+                                    break
+                                buff = self.conn.recv(1024)
+                                if len(buff) == 0:
+                                    break
+                                f.write(buff)
+                                byterecv += len(buff)
+                            f.close()
+                            logging.info("Saved file %s", file_path)
+        except socket.error as msg:
+            logging.info(msg)
+            self.conn.close()
+
+
 
     def senddata(self):
         return
@@ -136,10 +152,18 @@ class SocketFileClient(object):
         self.host = host
         self.port = port
         self.working_dir = working_dir
-
+    def connect(self):
         # initialize socket connection
-        self.sc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sc.connect((host, int(port)))
+        is_connect = True
+        try:
+            self.sc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sc.connect((self.host, int(self.port)))
+        except socket.error as msg:
+            logging.info(msg)
+            self.sc.close()
+            self.sc = None
+            is_connect = False
+        return is_connect
 
     def __get_absolute_path(self, src_path):
         """Return absolute path by adding working_dir prefix to `src_path`."""

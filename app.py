@@ -70,6 +70,13 @@ class MyFileHandler(monitor.FileHandler):
 def run_master(host, port, working_dir):
     logging.info('Master start')
     socket_client = ServerSyncs.SocketFileClient(host, port, working_dir)
+    while True:
+        is_connnect = socket_client.connect()
+        if is_connnect == True:
+            break
+        else:
+            time.sleep(1)
+    logging.info(is_connnect)
     handler = MyFileHandler(socket_client, working_dir)
     monitor.watch(working_dir, handler)
 
