@@ -205,7 +205,12 @@ class SocketFileClient(object):
 
             logging.info(datarecv)
             if datarecv == "syncs|ok":
-                f = open(abs_src_path, "rb")
+                while 1:
+                    try:
+                        f = open(abs_src_path, "rb")
+                        break
+                    except IOError as e:
+                        logging.info("I/O error({0}): {1}".format(e.errno, e.strerror))
                 byteSend = 0
                 while 1:
                     if byteSend == filesize:
