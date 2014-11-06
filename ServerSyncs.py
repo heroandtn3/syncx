@@ -48,8 +48,7 @@ class SocketFileServer(object):
                 syncs|modifed|1|directory
                 syncs|modifed|2|file
             moved: moved file
-                syncs|moved|1|directory
-                syncs|moved|2|file
+                syncs|moved|src_path|dest_path
 
         """
         self.soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -57,7 +56,7 @@ class SocketFileServer(object):
         try:
             self.soc.bind((self.host, int(self.port)))
         except socket.error as msg:
-            logging.info('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
+            logging.info('Bind failed. Error Code : %s', msg)
 
         self.soc.listen(10)
 
@@ -82,6 +81,19 @@ class SocketFileServer(object):
                         break
                 logging.info('datar %s', datar)
                 datar = datar.split("|")
+                if (datar[0] == "syncs" and datar[1] == "moved"): #moved
+                    src_path = self.__get_absolute_path(datar[2])
+                    dest_path = self.__get_absolute_path(datar[3])
+                    if (datar[4] == "1"): #moved directory
+                        #if not os.path.exists(dest_path):
+                         #   os.makedirs(dest_path)
+                        shutil.move(src_path, dest_path)
+
+                    if (datar[4] == "2"): #moved file
+                        #copy file src_path to dest_path
+                        shutil.move(src_path, dest_path)
+                    self.conn.send("moved|ok".encode("utf-8"))
+
 
                 if (datar[0] == "syncs" and datar[1] == "delete"): #delete
                     src_path = self.__get_absolute_path(datar[2])
@@ -235,17 +247,23 @@ class SocketFileClient(object):
 
 
     def on_modified(self, src_path, is_directory):
-        self.on_created(src_path, is_directory)
+        if not is_directory:
+            self.on_created(src_path, is_directory)
         pass
 
     def on_moved(self, src_path, dest_path, is_directory):
+        if is_directory:
+            buffsend = "syncs|moved|%s|%s|1" % (src_path, dest_path)
+        else:
+            buffsend = "syncs|moved|%s|%s|2" % (src_path, dest_path)
+
+        logging.info(buffsend)
+        self.sc.send(buffsend.encode("utf-8"))
+
+        buffrecv = self.sc.recv(1024)
+        buffrecv = buffrecv.decode("utf-8")
+        if (buffrecv == "moved|ok"):
+            logging.info("moved success")
+        else:
+            pass
         pass
-
-
-
-
-
-
-
-
-

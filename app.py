@@ -11,14 +11,14 @@ import ServerSyncs
 
 master_cfg = {
     'host'          : '127.0.0.1',
-    'port'          : '6969',
+    'port'          : '6996',
     'working_dir'   : 'master_dir',
     'is_master'    : True,
 }
 
 slave_cfg = {
     'host'          : '127.0.0.1',
-    'port'          : '6969',
+    'port'          : '6996',
     'working_dir'   : 'slave_dir',
     'is_master'    : False,
 }
@@ -64,6 +64,7 @@ class MyFileHandler(monitor.FileHandler):
     def on_moved(self, src_path, dest_path, is_directory):
         super(MyFileHandler, self).on_moved(src_path, dest_path, is_directory)
         src_path = self.__remove_working_dir(src_path)
+        dest_path = self.__remove_working_dir(dest_path)
         self.socket_client.on_moved(src_path, dest_path, is_directory)
 
 
