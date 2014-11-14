@@ -12,6 +12,8 @@
 import os
 import os.path
 import socket
+import time
+from socket import error
 import shutil
 import sys
 import select
@@ -71,27 +73,39 @@ class SocketFileServer(object):
 
 
     def tranfer(self):
+        is__disconnect = False
+
         try:
-            while True:
+            while not is__disconnect:
                 datar = ""
                 while 1:
                     data = self.conn.recv(1024)
+                    
+                    #if data = "" then client disconnect
+                    if not data:
+                        logging.info("Client disconnect from: %s"%self.conn)
+                        self.conn.close()
+                        is__disconnect = True
+                        break
                     datar += data.decode('utf-8')
                     if len(datar) > 0:
                         break
+                if is__disconnect:
+                    break
+
                 logging.info('datar %s', datar)
                 datar = datar.split("|")
+
                 if (datar[0] == "syncs" and datar[1] == "moved"): #moved
                     src_path = self.__get_absolute_path(datar[2])
                     dest_path = self.__get_absolute_path(datar[3])
                     if (datar[4] == "1"): #moved directory
-                        #if not os.path.exists(dest_path):
-                         #   os.makedirs(dest_path)
                         shutil.move(src_path, dest_path)
 
                     if (datar[4] == "2"): #moved file
                         #copy file src_path to dest_path
                         shutil.move(src_path, dest_path)
+
                     self.conn.send("moved|ok".encode("utf-8"))
 
 
@@ -103,6 +117,7 @@ class SocketFileServer(object):
                         #TODO: check if src_path is exist or not
                         if os.path.isfile(src_path):
                             os.remove(src_path)
+
                     self.conn.send("delete|ok".encode("utf-8"))
                     logging.info("delete success")
 
@@ -110,16 +125,21 @@ class SocketFileServer(object):
                     self.conn.send("create|ok".encode("utf-8"))
                     if (datar[2] == "1"): #Create directory
                         dir_path = self.__get_absolute_path(datar[3])
+
                         if not os.path.exists(dir_path):
                             os.makedirs(dir_path)
+
                         logging.info("Create directory success")
                         self.conn.send("directory|ok".encode("utf-8"));
+
                     if (datar[2] == "2"): #Create file
                         logging.info("Create file")
                         datarecv = ""
+
                         while 1:
                             data = self.conn.recv(1024)
                             datarecv += data.decode('utf-8')
+
                             if len(datarecv) > 0:
                                 break
 
@@ -128,7 +148,6 @@ class SocketFileServer(object):
                         if datarecv[0] =="syncs" and datarecv[1] == "filename" and datarecv[3] == "filesize":
                             file_path = self.__get_absolute_path(datarecv[2])
                             logging.info('Receiving %s', file_path)
-
                             filesize = int(datarecv[4])
                             logging.info(filesize)
 
@@ -139,17 +158,34 @@ class SocketFileServer(object):
                             while 1:
                                 if byterecv == filesize:
                                     break
+
                                 buff = self.conn.recv(1024)
                                 if len(buff) == 0:
                                     break
+
                                 f.write(buff)
                                 byterecv += len(buff)
+
                             f.close()
                             logging.info("Saved file %s", file_path)
-        except socket.error as msg:
+
+        except OSError as msg:
             logging.info(msg)
             self.conn.close()
-
+        
+        #if master disconnect then connect to slave syncs
+        if is__disconnect:
+                time.sleep(1)
+                logging.info("master disconnect then start itselt to master")
+                socket_client = SocketFileClient("127.0.0.1", "6997", "master_dir")
+                #while True:
+                is_connnect = socket_client.connect()
+                logging.info(is_connnect)
+                #if is_connnect == True:
+                  #      break
+                  #  else:
+                  #  time.sleep(1)
+        
 
 
     def senddata(self):
