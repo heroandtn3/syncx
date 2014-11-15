@@ -158,8 +158,10 @@ class SocketFileServer(object):
                             while 1:
                                 if byterecv == filesize:
                                     break
-
-                                buff = self.conn.recv(1024)
+                                t = 1024
+                                if byterecv + 1024 > filesize:
+                                    t = filesize - byterecv
+                                buff = self.conn.recv(t)
                                 if len(buff) == 0:
                                     break
 
