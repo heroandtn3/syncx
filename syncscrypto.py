@@ -81,27 +81,23 @@ class SyncsCrypto(object):
 
 
     def base64encode(self, buff):
-        return base64.b64encode(buff)#.encode("utf-8"))
+        return base64.b64encode(buff.encode("utf-8"))
 
 
     def base64decode(self, buff):
         return base64.b64decode(buff).decode("utf-8")
 
 """
-pub_file = "publickey.pub"
-private_file = "privatekey.pub"
+crypto = SyncsCrypto()
 #rsa_genkey(pub_file, private_file)
 message = "hoank1@viettel.com.vn"
-rsa = rsa_loadkey(pub_file, private_file)
+rsa = crypto.rsa_loadkey()
 
-dataencrypt = rsa_encrypt(message.encode("utf-8"), rsa)
-print (rsa_decrypt(dataencrypt, rsa))
-
-buff = "ngutyen khanh hoa"
-dd = rc4crypt(buff, message)
-dd = base64.b64encode(dd.encode("utf-8"))
-
-print (dd)
-
-print (rc4crypt(base64.b64decode(dd).decode("utf-8"), message))
+dataencryp = crypto.rsa_encrypt(message, rsa)
+dataencrypt = "%s"%dataencryp
+print (dataencrypt)
+buff = crypto.base64encode(dataencrypt)
+buff = crypto.base64decode(buff)
+print (buff)
+print (crypto.rsa_decrypt(buff, rsa))
 """

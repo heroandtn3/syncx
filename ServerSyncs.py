@@ -21,6 +21,7 @@ import json
 import threading
 import logging
 from configobj import ConfigObj
+import syncscrypto
 
 class SocketFileServer(object):
 
@@ -28,6 +29,9 @@ class SocketFileServer(object):
         self.host = host
         self.port = port
         self.working_dir = working_dir
+        self.crypto = syncscrypto.SyncsCrypto()
+        self.rsa = self.crypto.rsa_loadkey()
+
 
         if not os.path.exists(working_dir):
             os.mkdir(working_dir)
@@ -41,6 +45,12 @@ class SocketFileServer(object):
         server listen host and port
         app: Signature is "syncs"
         buffer recv:
+            verify Signature: Signature|buffer
+                buffer:
+                - rsa decrypt: sign|date-time|keyrc4
+                - buff send : rsa decrypt|sign
+                rsa encrypt(buff send)
+                ->send
             create: Create file
                 create|1|: directory "syncs|create|1|directory"
                 create|2|: file      "syncs|create|2|"
@@ -93,8 +103,16 @@ class SocketFileServer(object):
                 if is__disconnect:
                     break
 
-                logging.info('datar %s', datar)
+                #logging.info('datar %s', datar)
+                buffr = datar
                 datar = datar.split("|")
+
+                if datar[0] == "Signature": #verify
+                    dataenc = buffr[len(datar[0]) + 1 : len(buffr)]
+                    logging.info(s)
+                    datadec = self.crypto.rsa_decrypt(dataenc, self.rsa)
+                    logging.info(dataenc)
+
 
                 if (datar[0] == "syncs" and datar[1] == "moved"): #moved
                     src_path = self.__get_absolute_path(datar[2])
@@ -104,7 +122,8 @@ class SocketFileServer(object):
 
                     if (datar[4] == "2"): #moved file
                         #copy file src_path to dest_path
-                        shutil.move(src_path, dest_path)
+                        if os.path.isfile(src_path):
+                            shutil.move(src_path, dest_path)
 
                     self.conn.send("moved|ok".encode("utf-8"))
 
@@ -122,7 +141,6 @@ class SocketFileServer(object):
                     logging.info("delete success")
 
                 if (datar[0] == "syncs" and datar[1] == "create"): #Create
-                    self.conn.send("create|ok".encode("utf-8"))
                     if (datar[2] == "1"): #Create directory
                         dir_path = self.__get_absolute_path(datar[3])
 
@@ -133,6 +151,7 @@ class SocketFileServer(object):
                         self.conn.send("directory|ok".encode("utf-8"));
 
                     if (datar[2] == "2"): #Create file
+                        self.conn.send("create|ok".encode("utf-8"))
                         logging.info("Create file")
                         datarecv = ""
 
@@ -142,6 +161,7 @@ class SocketFileServer(object):
 
                             if len(datarecv) > 0:
                                 break
+                        logging.info(datarecv)
 
                         datarecv = datarecv.split("|")
 
@@ -175,6 +195,7 @@ class SocketFileServer(object):
             logging.info(msg)
             self.conn.close()
         
+        """
         #if master disconnect then connect to slave syncs
         if is__disconnect:
                 time.sleep(1)
@@ -187,7 +208,7 @@ class SocketFileServer(object):
                   #      break
                   #  else:
                   #  time.sleep(1)
-        
+        """
 
 
     def senddata(self):
@@ -202,23 +223,41 @@ class SocketFileClient(object):
         self.host = host
         self.port = port
         self.working_dir = working_dir
+        self.crypto = syncscrypto.SyncsCrypto()
+        self.rsa = self.crypto.rsa_loadkey()
+
+
+    def verify(self):
+        sign = "DSD01|hoank|keyrc4"
+        buffec = self.crypto.rsa_encrypt(sign, self.rsa)
+        logging.info(buffec)
+        #buffec = "%s"%buffec
+        #buff = self.crypto.base64encode(buffec)
+        
+        buffsend = "Signature|%s"%buffec
+        self.sc.send(buffsend.encode("utf-8"))
+        return True
+
+
     def connect(self):
         # initialize socket connection
         is_connect = True
         try:
             self.sc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sc.connect((self.host, int(self.port)))
+            
+            #if (not self.verify()):
+             #   is_connect = False
         except socket.error as msg:
             logging.info(msg)
             self.sc.close()
-            self.sc = None
             is_connect = False
         return is_connect
 
     def __get_absolute_path(self, src_path):
         """Return absolute path by adding working_dir prefix to `src_path`."""
         return os.path.join(self.working_dir, src_path)
-
+    
     def on_created(self, src_path, is_directory):
         abs_src_path = self.__get_absolute_path(src_path)
 
@@ -261,6 +300,7 @@ class SocketFileClient(object):
                         break
                     except IOError as e:
                         logging.info("I/O error({0}): {1}".format(e.errno, e.strerror))
+                    time.sleep(1)
                 byteSend = 0
                 while 1:
                     if byteSend == filesize:
@@ -269,6 +309,7 @@ class SocketFileClient(object):
                     self.sc.send(buff)
                     byteSend += len(buff)
             logging.info("Send file success")
+       
 
 
     def on_deleted(self, src_path, is_directory):
@@ -285,8 +326,10 @@ class SocketFileClient(object):
 
 
     def on_modified(self, src_path, is_directory):
-        if not is_directory:
-            self.on_created(src_path, is_directory)
+        
+        #if not is_directory:
+        #    self.on_created(src_path, is_directory)
+        
         pass
 
     def on_moved(self, src_path, dest_path, is_directory):
