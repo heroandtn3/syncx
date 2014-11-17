@@ -118,7 +118,8 @@ class SocketFileServer(object):
                     src_path = self.__get_absolute_path(datar[2])
                     dest_path = self.__get_absolute_path(datar[3])
                     if (datar[4] == "1"): #moved directory
-                        shutil.move(src_path, dest_path)
+                        if os.path.isdir(src_path):
+                            shutil.move(src_path, dest_path)
 
                     if (datar[4] == "2"): #moved file
                         #copy file src_path to dest_path
