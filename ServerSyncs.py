@@ -326,10 +326,8 @@ class SocketFileClient(object):
 
 
     def on_modified(self, src_path, is_directory):
-        
-        #if not is_directory:
-        #    self.on_created(src_path, is_directory)
-        
+        if not is_directory:
+            self.on_created(src_path, is_directory)        
         pass
 
     def on_moved(self, src_path, dest_path, is_directory):
