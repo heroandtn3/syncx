@@ -23,14 +23,29 @@ import logging
 from configobj import ConfigObj
 import syncscrypto
 
+class SocketListener(object):
+ 
+    def on_connect(self):
+        """Call when socket connect or reconnect."""
+        pass
+ 
+    def on_disconnect(self):
+        """Call when socket is disconnected."""
+        pass
+
 class SocketFileServer(object):
 
-    def __init__(self, host, port, working_dir):
+    def __init__(self, host, port, working_dir,  socket_listener = None):
         self.host = host
         self.port = port
         self.working_dir = working_dir
         self.crypto = syncscrypto.SyncsCrypto()
         self.rsa = self.crypto.rsa_loadkey()
+
+        if socket_listener is None:
+            self.socket_listener = SocketListener()
+        else:
+            self.socket_listener = socket_listener
 
 
         if not os.path.exists(working_dir):
@@ -45,7 +60,7 @@ class SocketFileServer(object):
         server listen host and port
         app: Signature is "syncs"
         buffer recv:
-            verify Signature: Signature|buffer
+            Verify Signature: Signature|buffer
                 buffer:
                 - rsa decrypt: sign|date-time|keyrc4
                 - buff send : rsa decrypt|sign
@@ -63,23 +78,22 @@ class SocketFileServer(object):
                 syncs|moved|src_path|dest_path
 
         """
-        self.soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    def connect(self):
+        # initialize socket connection
+        is_connect = True
         try:
-            self.soc.bind((self.host, int(self.port)))
-        except socket.error as msg:
-            logging.info('Bind failed. Error Code : %s', msg)
-
-        self.soc.listen(10)
-
-        logging.info("listening for connections, on PORT: %s", self.port)
-        while 1:
-            self.conn, self.addr = self.soc.accept()
-            inputready,outputready,exceptready \
-                = select.select ([self.conn],[self.conn],[])
-            logging.info("Connect by %s", self.addr)
+            self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.conn.connect((self.host, int(self.port)))
+            self.socket_listener.on_connect()
             thread = threading.Thread(target = self.tranfer)
             thread.start()
+
+        except socket.error as msg:
+            logging.info(msg)
+            self.conn.close()
+            is_connect = False
+        return is_connect
+
 
 
     def tranfer(self):
@@ -95,6 +109,7 @@ class SocketFileServer(object):
                     if not data:
                         logging.info("Client disconnect from: %s"%self.conn)
                         self.conn.close()
+                        self.socket_listener.on_disconnect()
                         is__disconnect = True
                         break
                     datar += data.decode('utf-8')
@@ -196,19 +211,20 @@ class SocketFileServer(object):
             logging.info(msg)
             self.conn.close()
         
-        """
         #if master disconnect then connect to slave syncs
+        """
         if is__disconnect:
                 time.sleep(1)
                 logging.info("master disconnect then start itselt to master")
                 socket_client = SocketFileClient("127.0.0.1", "6997", "master_dir")
-                #while True:
-                is_connnect = socket_client.connect()
-                logging.info(is_connnect)
-                #if is_connnect == True:
-                  #      break
-                  #  else:
-                  #  time.sleep(1)
+               
+                while True:
+                    is_connnect = socket_client.connect()
+                    logging.info(is_connnect)
+                    if is_connnect == True:
+                        break
+                    #else:
+                    #    time.sleep(1)
         """
 
 
@@ -220,12 +236,20 @@ class SocketFileClient(object):
     """
     Use as a socket client for sending data.
     """
-    def __init__(self, host, port, working_dir):
+    def __init__(self, host, port, working_dir,  socket_listener = None):
         self.host = host
         self.port = port
         self.working_dir = working_dir
         self.crypto = syncscrypto.SyncsCrypto()
         self.rsa = self.crypto.rsa_loadkey()
+
+        if socket_listener is None:
+            self.socket_listener = SocketListener()
+        else:
+            self.socket_listener = socket_listener
+
+        self.thread = threading.Thread(target = self.listen)
+        self.thread.start()
 
 
     def verify(self):
@@ -239,21 +263,26 @@ class SocketFileClient(object):
         self.sc.send(buffsend.encode("utf-8"))
         return True
 
-
-    def connect(self):
-        # initialize socket connection
-        is_connect = True
+    def listen(self):
+        self.soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            self.sc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sc.connect((self.host, int(self.port)))
-            
-            #if (not self.verify()):
-             #   is_connect = False
+            self.soc.bind((self.host, int(self.port)))
         except socket.error as msg:
-            logging.info(msg)
-            self.sc.close()
-            is_connect = False
-        return is_connect
+            self.soc.close()
+            logging.info('Bind failed. Error Code : %s', msg)
+
+        self.soc.listen(10)
+
+        logging.info("listening for connections, on PORT: %s", self.port)
+        while 1:
+            self.sc, self.addr = self.soc.accept()
+            inputready,outputready,exceptready \
+                = select.select ([self.sc],[self.sc],[])
+            self.socket_listener.on_connect()
+            logging.info("Connect by %s", self.addr)
+            #thread = threading.Thread(target = self.tranfer)
+            #thread.start()
 
     def __get_absolute_path(self, src_path):
         """Return absolute path by adding working_dir prefix to `src_path`."""
@@ -310,6 +339,7 @@ class SocketFileClient(object):
                     self.sc.send(buff)
                     byteSend += len(buff)
             logging.info("Send file success")
+        return True
        
 
 
@@ -324,12 +354,14 @@ class SocketFileClient(object):
             logging.info("send directory success")
         else:
             pass
+        return True
 
 
     def on_modified(self, src_path, is_directory):
         if not is_directory:
             self.on_created(src_path, is_directory)        
         pass
+        return True
 
     def on_moved(self, src_path, dest_path, is_directory):
         if is_directory:
@@ -347,3 +379,5 @@ class SocketFileClient(object):
         else:
             pass
         pass
+
+        return True
