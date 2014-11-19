@@ -113,14 +113,14 @@ handler = MyFileHandler()
 def run_master(host, port, working_dir):
  
     logging.info('Master start')
-    socket_client = ServerSyncs.SocketFileClient(host, port, working_dir)
+    socket_client = ServerSyncs.SocketFileServer(host, port, working_dir)
     is_RunMaster = True
     handler.set_config(socket_client, working_dir)
     monitor.watch(working_dir, handler)
  
 def run_slave(host, port, working_dir):
     logging.info('Slave start')
-    socket_server = ServerSyncs.SocketFileServer(host, port, working_dir)
+    socket_server = ServerSyncs.SocketFileClient(host, port, working_dir)
     if socket_server.connect():
         return True
     else:

@@ -33,7 +33,7 @@ class SocketListener(object):
         """Call when socket is disconnected."""
         pass
 
-class SocketFileServer(object):
+class SocketFileClient(object):
 
     def __init__(self, host, port, working_dir,  socket_listener = None):
         self.host = host
@@ -232,7 +232,7 @@ class SocketFileServer(object):
         return
 
 
-class SocketFileClient(object):
+class SocketFileServer(object):
     """
     Use as a socket client for sending data.
     """
