@@ -47,7 +47,6 @@ class SocketFileClient(object):
         else:
             self.socket_listener = socket_listener
 
-
         if not os.path.exists(working_dir):
             os.mkdir(working_dir)
 
@@ -55,29 +54,6 @@ class SocketFileClient(object):
         """Return absolute path by adding working_dir prefix to `src_path`."""
         return os.path.join(self.working_dir, src_path)
 
-    def listen(self):
-        """
-        server listen host and port
-        app: Signature is "syncs"
-        buffer recv:
-            Verify Signature: Signature|buffer
-                buffer:
-                - rsa decrypt: sign|date-time|keyrc4
-                - buff send : rsa decrypt|sign
-                rsa encrypt(buff send)
-                ->send
-            create: Create file
-                create|1|: directory "syncs|create|1|directory"
-                create|2|: file      "syncs|create|2|"
-            delete: Delete file
-                syncs|delete|directory
-            modifed: modifed file
-                syncs|modifed|1|directory
-                syncs|modifed|2|file
-            moved: moved file
-                syncs|moved|src_path|dest_path
-
-        """
     def connect(self):
         # initialize socket connection
         is_connect = True
@@ -93,7 +69,6 @@ class SocketFileClient(object):
             self.conn.close()
             is_connect = False
         return is_connect
-
 
 
     def tranfer(self):
