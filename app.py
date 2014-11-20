@@ -117,7 +117,6 @@ def try_connect(host, port):
         if check[0] == signature and check[1] == "Master is ready": #check chu ky
             is_connect = True
         
-        is_connect = True
 
     except OSError as err:
         logging.debug('No connection established, OSError: %s', err)
