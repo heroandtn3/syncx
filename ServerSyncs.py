@@ -250,14 +250,44 @@ class SocketFileServer(object):
         self.soc.listen(10)
 
         logging.info("listening for connections, on PORT: %s", self.port)
+        is_listen = True
         while 1:
             self.sc, self.addr = self.soc.accept()
             inputready,outputready,exceptready \
                 = select.select ([self.sc],[self.sc],[])
+            """
             self.socket_listener.on_connect()
             logging.info("Connect by %s", self.addr)
-            #thread = threading.Thread(target = self.tranfer)
-            #thread.start()
+            """
+            
+            #verify
+            if is_listen:
+              try:
+                buffrecv = self.sc.recv(1024)
+                buff = self.crypto.base64decode(buffrecv)
+                s = buff,
+            
+                buff = self.crypto.rsa_decrypt(buff, self.rsa)
+
+                buff = buff.decode("utf-8")
+
+                check = buff.split("|")
+                if check[0] != "DSD01": #check chu ky
+                    self.sc.close()
+                else:
+                    buff += "*Master is ready"
+                    logging.info(buff)
+                    buffenc = self.crypto.rsa_encrypt(buff, self.rsa)
+                    b64 = self.crypto.base64encode(buffenc[0])
+                    self.sc.send(b64)
+                    self.socket_listener.on_connect()
+                    logging.info("Connect by %s", self.addr)
+                    is_listen = False
+              except socket.error as msg:
+                self.sc.close
+                self.socket_listener.on_disconnect()
+                logging.info(msg)
+            
 
     def __get_absolute_path(self, src_path):
         """Return absolute path by adding working_dir prefix to `src_path`."""

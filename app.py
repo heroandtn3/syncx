@@ -6,11 +6,13 @@ import threading
 import argparse
 import socket
 from socket import error
+from time import gmtime, strftime
  
 from configobj import ConfigObj
  
 import file_monitor as monitor
 import ServerSyncs
+import syncscrypto
  
 master_cfg = {
     'host'          : '127.0.0.1',
@@ -88,14 +90,40 @@ def try_connect(host, port):
 
     Return that socket if connection is availabe, else return None.
     """
+    is_connect = False
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((host, int(port)))
+
+        crypto = syncscrypto.SyncsCrypto()
+        rsa = crypto.rsa_loadkey()
+        strtime = strftime("%Y-%m-%d %H:%M:%S", gmtime())
+
+        signature = "DSD01|" + str(strtime)
+        logging.info("signature is: %s" %signature)
+        buffenc = crypto.rsa_encrypt(signature, rsa)
+        b64 = crypto.base64encode(buffenc[0])
+        sock.send(b64)
+
+        buffrecv = sock.recv(1024)
+        buff = crypto.base64decode(buffrecv)
+        s = buff,
+            
+        buff = crypto.rsa_decrypt(buff, rsa)
+        buff = buff.decode("utf-8")
+        logging.info(buff)
+      
+        check = buff.split("*")
+        if check[0] == signature and check[1] == "Master is ready": #check chu ky
+            is_connect = True
+        
+        is_connect = True
+
     except OSError as err:
         logging.debug('No connection established, OSError: %s', err)
         return None
-
-    return sock
+    sock.close()
+    return is_connect
  
  
 def run_master(host, port, working_dir):
@@ -128,10 +156,9 @@ if __name__ == "__main__":
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    sock = try_connect(master_cfg['host'], master_cfg['port'])
-    if sock:
+    is_connect = try_connect(master_cfg['host'], master_cfg['port'])
+    if is_connect:
         # oh, that may be a master, I must be slave now
-        sock.close() # TODO: reuse this socket
         run(slave_cfg)
     else:
         # opps, I'm gonna be master now

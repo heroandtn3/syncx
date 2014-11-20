@@ -81,11 +81,11 @@ class SyncsCrypto(object):
 
 
     def base64encode(self, buff):
-        return base64.b64encode(buff.encode("utf-8"))
+        return base64.b64encode(buff)#.encode("utf-8"))
 
 
     def base64decode(self, buff):
-        return base64.b64decode(buff).decode("utf-8")
+        return base64.b64decode(buff)
 
 """
 crypto = SyncsCrypto()
