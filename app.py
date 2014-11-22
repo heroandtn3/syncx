@@ -13,6 +13,7 @@ from configobj import ConfigObj
 import file_monitor as monitor
 import ServerSyncs
 import syncscrypto
+import utils
  
 master_cfg = {
     'host'          : '127.0.0.1',
@@ -39,9 +40,13 @@ class MyFileHandler(monitor.FileHandler):
     - working_dir: working directory to work on.
     """
  
-    def __init__(self, conn, working_dir):
-        self.conn = conn
+    def __init__(self, host, port, working_dir):
         self.working_dir = working_dir
+        self.connected = False
+        self.conn = ServerSyncs.SocketFileServer(
+            host, port, working_dir,
+            socket_status_callback=self.socket_status_callback)
+        self.sync_logger = utils.RedisSyncLogger()
  
     def __remove_working_dir(self, src_path):
         """
@@ -56,33 +61,84 @@ class MyFileHandler(monitor.FileHandler):
             raise Exception('src_path does not contain working_dir')
         else:
             return src_path[len(self.working_dir) + 1:]
+
+    def socket_status_callback(self, is_connect):
+        if is_connect:
+            self.__on_connect()
+        else:
+            self.__on_disconnect()
+
+    def __on_connect(self):
+        logging.info('Connect successful!')
+        self.connected = True
+
+        # detect file changes from last_sync timestamp
+        last_sync = self.sync_logger.get_last_sync()
+        logging.debug('Last time sync: %s', last_sync)
+        if last_sync:
+            # last_sync available
+            # start scan file change from last_sync
+            pass
+            
+        else:
+            logging.debug('First time start app')
+            # scan all file
+            for f in utils.scan_dir(self.working_dir):
+                self.on_created(f, False)
+
+    def __on_disconnect(self):
+        logging.info('Opps! Disconnected!')
+        self.connected = False
  
  
     def on_created(self, src_path, is_directory):
         super(MyFileHandler, self).on_created(src_path, is_directory)
         src_path = self.__remove_working_dir(src_path)
         #TODO: https://github.com/heroandtn3/syncx/issues/5
-        if self.conn.on_created(src_path, is_directory):
-            logging.info('Create successful')
+        if self.connected:
+            if self.conn.on_created(src_path, is_directory):
+                logging.info('Create successful')
+            else:
+                logging.info('Opps')
         else:
-            logging.info('Opps')
+            self.sync_logger.save_not_sync(
+                'cre:%s:%s' % (src_path, 'd' if is_directory else 'f'),
+                time.time())
 
     def on_deleted(self, src_path, is_directory):
         super(MyFileHandler, self).on_deleted(src_path, is_directory)
         src_path = self.__remove_working_dir(src_path)
-        self.conn.on_deleted(src_path, is_directory)
+
+        if self.connected:
+            self.conn.on_deleted(src_path, is_directory)
+        else:
+            self.sync_logger.save_not_sync(
+                'del:%s:%s' % (src_path, 'd' if is_directory else 'f'),
+                time.time())
 
     def on_modified(self, src_path, is_directory):
         super(MyFileHandler, self).on_modified(src_path, is_directory)
         src_path = self.__remove_working_dir(src_path)
-        self.conn.on_modified(src_path, is_directory)
+        
+        if self.connected:
+            self.conn.on_modified(src_path, is_directory)
+        else:
+            self.sync_logger.save_not_sync(
+                'mod:%s:%s' % (src_path, 'd' if is_directory else 'f'),
+                time.time())
 
     def on_moved(self, src_path, dest_path, is_directory):
         super(MyFileHandler, self).on_moved(src_path, dest_path, is_directory)
         src_path = self.__remove_working_dir(src_path)
         dest_path = self.__remove_working_dir(dest_path)
-        self.conn.on_moved(src_path, dest_path, is_directory)
- 
+
+        if self.connected:
+            self.conn.on_moved(src_path, dest_path, is_directory)
+        else:
+            self.sync_logger.save_not_sync(
+                'mov:%s:%s:%s' % (src_path, dest_path,
+                                  'd' if is_directory else 'f'),
+                time.time())
  
 def try_connect(host, port):
     """
@@ -128,14 +184,13 @@ def try_connect(host, port):
  
 def run_master(host, port, working_dir):
     logging.info('Master start')
-    socket_client = ServerSyncs.SocketFileServer(host, port, working_dir)
-    handler = MyFileHandler(socket_client, working_dir)
+    handler = MyFileHandler(host, port, working_dir)
     monitor.watch(working_dir, handler)
 
 def run_slave(host, port, working_dir):
     logging.info('Slave start')
-    socket_server = ServerSyncs.SocketFileClient(host, port, working_dir)
-    socket_server.connect()
+    conn = ServerSyncs.SocketFileClient(host, port, working_dir)
+    conn.connect()
 
 def run(config):
     target = run_master if config['is_master'] else run_slave
