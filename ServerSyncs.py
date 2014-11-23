@@ -17,6 +17,7 @@ from socket import error
 import shutil
 import sys
 import select
+import hashlib
 import json
 import threading
 import logging
@@ -183,6 +184,7 @@ class SocketFileClient(object):
                         datarecv = datarecv.split("|")
 
                         if datarecv[0] =="syncs" and datarecv[1] == "filename" and datarecv[3] == "filesize":
+                            md5 = datarecv[5]
                             file_path = self.__get_absolute_path(datarecv[2])
                             logging.info('Receiving %s', file_path)
                             filesize = int(datarecv[4])
@@ -211,6 +213,11 @@ class SocketFileClient(object):
                                 byterecv += len(buff)
 
                             f.close()
+                            f = open(file_path, "rb")
+                            md5check = hashlib.md5(f.read()).hexdigest()
+                            f.close()
+                            if md5 == md5check:
+                                logging.info("md5 sample")
                             logging.info("Saved file %s", file_path)
 
         except OSError as msg:
@@ -332,17 +339,24 @@ class SocketFileServer(object):
 
         else:
             buffsend = "syncs|create|2"
-            logging.info(self.sc)
             self.sc.send(buffsend.encode("utf-8"))
 
             buffrecv = self.sc.recv(1024)
             buffrecv = buffrecv.decode('utf-8')
-            logging.info(buffrecv)
             if (buffrecv == "create|ok"):
                 logging.info("create success")
 
             filesize = os.path.getsize(abs_src_path)
-            datasend = "syncs|filename|" + src_path + "|filesize|" + str(filesize)
+            while 1:
+                    try:
+                        f = open(abs_src_path, "rb")
+                        break
+                    except IOError as e:
+                        logging.info("I/O error({0}): {1}".format(e.errno, e.strerror))
+                    time.sleep(1)
+            md5 = hashlib.md5(f.read()).hexdigest()
+            f.close()
+            datasend = "syncs|filename|" + src_path + "|filesize|" + str(filesize) + "|" + md5
 
             logging.info(datasend)
             datalen = len(datasend)
@@ -369,6 +383,7 @@ class SocketFileServer(object):
                     buff = f.read(1024)
                     self.sc.send(buff)
                     byteSend += len(buff)
+                f.close()
             logging.info("Send file success")
         return True
 

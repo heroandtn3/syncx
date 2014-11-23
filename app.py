@@ -5,6 +5,7 @@ import os
 import threading
 import argparse
 import socket
+import hashlib
 from socket import error
 from time import gmtime, strftime
 
@@ -84,7 +85,6 @@ class MyFileHandler(monitor.FileHandler):
             logging.debug('First time start app')
             # scan all file
             for f in utils.scan_dir(self.working_dir):
-                logging.info(f)
                 self.on_created(f, False)
 
     def __on_disconnect(self):
