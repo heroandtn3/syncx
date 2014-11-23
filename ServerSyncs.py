@@ -20,6 +20,7 @@ import select
 import json
 import threading
 import logging
+from time import gmtime, strftime
 from configobj import ConfigObj
 import syncscrypto
 
@@ -27,11 +28,11 @@ class SocketListener(object):
 
     def __init__(self):
         self.connected = False
- 
+
     def on_connect(self):
         """Call when socket connect or reconnect."""
         self.connected = True
- 
+
     def on_disconnect(self):
         """Call when socket is disconnected."""
         self.connected = False
@@ -72,8 +73,29 @@ class SocketFileClient(object):
             self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.conn.connect((self.host, int(self.port)))
             self.__on_connect()
-            thread = threading.Thread(target = self.tranfer)
-            thread.start()
+
+            strtime = strftime("%Y-%m-%d %H:%M:%S", gmtime())
+
+            signature = "DSD01|" + str(strtime)
+            logging.info("signature is: %s" %signature)
+            buffenc = self.crypto.rsa_encrypt(signature, self.rsa)
+            b64 = self.crypto.base64encode(buffenc[0])
+            self.conn.send(b64)
+
+            buffrecv = self.conn.recv(1024)
+            buff = self.crypto.base64decode(buffrecv)
+            s = buff,
+
+            buff = self.crypto.rsa_decrypt(buff, self.rsa)
+            buff = buff.decode("utf-8")
+            logging.info(buff)
+
+            check = buff.split("*")
+            if check[0] == signature and check[1] == "Master is ready": #check chu ky
+                is_connect = True
+
+                thread = threading.Thread(target = self.tranfer)
+                thread.start()
 
         except socket.error as msg:
             logging.info(msg)
@@ -90,7 +112,7 @@ class SocketFileClient(object):
                 datar = ""
                 while 1:
                     data = self.conn.recv(1024)
-                    
+
                     #if data = "" then client disconnect
                     if not data:
                         logging.info("Client disconnect from: %s"%self.conn)
@@ -107,13 +129,6 @@ class SocketFileClient(object):
                 #logging.info('datar %s', datar)
                 buffr = datar
                 datar = datar.split("|")
-
-                if datar[0] == "Signature": #verify
-                    dataenc = buffr[len(datar[0]) + 1 : len(buffr)]
-                    logging.info(s)
-                    datadec = self.crypto.rsa_decrypt(dataenc, self.rsa)
-                    logging.info(dataenc)
-
 
                 if (datar[0] == "syncs" and datar[1] == "moved"): #moved
                     src_path = self.__get_absolute_path(datar[2])
@@ -173,6 +188,11 @@ class SocketFileClient(object):
                             filesize = int(datarecv[4])
                             logging.info(filesize)
 
+                            path = os.path.dirname(file_path)
+
+                            if not os.path.isdir(path):
+                                os.makedirs(path)
+
                             self.conn.send("syncs|ok".encode('utf-8'))
                             f = open(file_path, "wb")
                             byterecv = 0
@@ -196,23 +216,6 @@ class SocketFileClient(object):
         except OSError as msg:
             logging.info(msg)
             self.conn.close()
-        
-        #if master disconnect then connect to slave syncs
-        """
-        if is__disconnect:
-                time.sleep(1)
-                logging.info("master disconnect then start itselt to master")
-                socket_client = SocketFileClient("127.0.0.1", "6997", "master_dir")
-               
-                while True:
-                    is_connnect = socket_client.connect()
-                    logging.info(is_connnect)
-                    if is_connnect == True:
-                        break
-                    #else:
-                    #    time.sleep(1)
-        """
-
 
     def senddata(self):
         return
@@ -243,18 +246,6 @@ class SocketFileServer(object):
         if self.socket_status_callback:
             self.socket_status_callback(False)
 
-
-    def verify(self):
-        sign = "DSD01|hoank|keyrc4"
-        buffec = self.crypto.rsa_encrypt(sign, self.rsa)
-        logging.info(buffec)
-        #buffec = "%s"%buffec
-        #buff = self.crypto.base64encode(buffec)
-        
-        buffsend = "Signature|%s"%buffec
-        self.sc.send(buffsend.encode("utf-8"))
-        return True
-
     def listen(self):
         self.soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -275,8 +266,8 @@ class SocketFileServer(object):
             """
             self.__on_connect()
             logging.info("Connect by %s", self.addr)
+
             """
-            
             #verify
             if is_listen:
                 try:
@@ -289,27 +280,43 @@ class SocketFileServer(object):
                     buff = buff.decode("utf-8")
 
                     check = buff.split("|")
-                    if check[0] != "DSD01": #check chu ky
+                    if check[0] == "Ping":
+                        logging.info(check[0])
+                        if check[1] != "DSD01": #check chu ky
+                            self.sc.close()
+                        else:
+                            buff += "*Master is ready"
+                            logging.info(buff)
+                            buffenc = self.crypto.rsa_encrypt(buff, self.rsa)
+                            b64 = self.crypto.base64encode(buffenc[0])
+                            self.sc.send(b64)
+                            logging.info("Connect by %s", self.addr)
+                            is_listen = True
+                            #self.__on_connect()
                         self.sc.close()
                     else:
-                        buff += "*Master is ready"
-                        logging.info(buff)
-                        buffenc = self.crypto.rsa_encrypt(buff, self.rsa)
-                        b64 = self.crypto.base64encode(buffenc[0])
-                        self.sc.send(b64)
-                        logging.info("Connect by %s", self.addr)
-                        is_listen = False
-                        self.__on_connect()
+                        if check[0] != "DSD01": #check chu ky
+                            self.sc.close()
+                        else:
+                            buff += "*Master is ready"
+                            logging.info(buff)
+                            buffenc = self.crypto.rsa_encrypt(buff, self.rsa)
+                            b64 = self.crypto.base64encode(buffenc[0])
+                            self.sc.send(b64)
+                            logging.info("Connect by %s", self.addr)
+                            is_listen = True
+                            self.__on_connect()
                 except OSError as msg:
                     logging.info(msg)
                     self.sc.close
                     self.__on_disconnect()
-            
+
+
 
     def __get_absolute_path(self, src_path):
         """Return absolute path by adding working_dir prefix to `src_path`."""
         return os.path.join(self.working_dir, src_path)
-    
+
     def on_created(self, src_path, is_directory):
         abs_src_path = self.__get_absolute_path(src_path)
 
@@ -325,10 +332,12 @@ class SocketFileServer(object):
 
         else:
             buffsend = "syncs|create|2"
+            logging.info(self.sc)
             self.sc.send(buffsend.encode("utf-8"))
 
             buffrecv = self.sc.recv(1024)
             buffrecv = buffrecv.decode('utf-8')
+            logging.info(buffrecv)
             if (buffrecv == "create|ok"):
                 logging.info("create success")
 
@@ -362,7 +371,7 @@ class SocketFileServer(object):
                     byteSend += len(buff)
             logging.info("Send file success")
         return True
-       
+
 
 
     def on_deleted(self, src_path, is_directory):
@@ -381,7 +390,7 @@ class SocketFileServer(object):
 
     def on_modified(self, src_path, is_directory):
         if not is_directory:
-            self.on_created(src_path, is_directory)        
+            self.on_created(src_path, is_directory)
         pass
         return True
 
