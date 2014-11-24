@@ -14,8 +14,11 @@ def scan_dir(src_path):
     if not os.path.isdir(src_path):
         raise Exception('src_path does not contain working_dir')
     for dirpath, dirnames, filenames in os.walk(src_path):
+        for d in dirnames:
+            yield os.path.join(dirpath, d), True
         for f in filenames:
-            yield os.path.join(dirpath, f)
+            yield os.path.join(dirpath, f), False
+
 
 class RedisSyncLogger():
 

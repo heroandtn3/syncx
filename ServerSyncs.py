@@ -24,19 +24,7 @@ import logging
 from time import gmtime, strftime
 from configobj import ConfigObj
 import syncscrypto
-
-class SocketListener(object):
-
-    def __init__(self):
-        self.connected = False
-
-    def on_connect(self):
-        """Call when socket connect or reconnect."""
-        self.connected = True
-
-    def on_disconnect(self):
-        """Call when socket is disconnected."""
-        self.connected = False
+import utils
 
 class SocketFileClient(object):
     """
@@ -51,6 +39,7 @@ class SocketFileClient(object):
         self.socket_status_callback = socket_status_callback
         self.crypto = syncscrypto.SyncsCrypto()
         self.rsa = self.crypto.rsa_loadkey()
+        self.sync_logger = utils.RedisSyncLogger(port=1999)
 
         if not os.path.exists(working_dir):
             os.mkdir(working_dir)
@@ -116,7 +105,7 @@ class SocketFileClient(object):
 
                     #if data = "" then client disconnect
                     if not data:
-                        logging.info("Client disconnect from: %s"%self.conn)
+                        logging.info("Client disconnect from master")
                         self.conn.close()
                         self.__on_disconnect()
                         is__disconnect = True
@@ -144,6 +133,7 @@ class SocketFileClient(object):
                             shutil.move(src_path, dest_path)
 
                     self.conn.send("moved|ok".encode("utf-8"))
+                    self.sync_logger.save_last_sync()
 
 
                 if (datar[0] == "syncs" and datar[1] == "delete"): #delete
@@ -157,6 +147,7 @@ class SocketFileClient(object):
 
                     self.conn.send("delete|ok".encode("utf-8"))
                     logging.info("delete success")
+                    self.sync_logger.save_last_sync()
 
                 if (datar[0] == "syncs" and datar[1] == "create"): #Create
                     if (datar[2] == "1"): #Create directory
@@ -166,7 +157,8 @@ class SocketFileClient(object):
                             os.makedirs(dir_path)
 
                         logging.info("Create directory success")
-                        self.conn.send("directory|ok".encode("utf-8"));
+                        self.conn.send("directory|ok".encode("utf-8"))
+                        self.sync_logger.save_last_sync()
 
                     if (datar[2] == "2"): #Create file
                         self.conn.send("create|ok".encode("utf-8"))
@@ -219,6 +211,7 @@ class SocketFileClient(object):
                             if md5 == md5check:
                                 logging.info("md5 sample")
                             logging.info("Saved file %s", file_path)
+                            self.sync_logger.save_last_sync()
 
         except OSError as msg:
             logging.info(msg)
