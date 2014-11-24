@@ -325,105 +325,116 @@ class SocketFileServer(object):
         return os.path.join(self.working_dir, src_path)
 
     def on_created(self, src_path, is_directory):
-        abs_src_path = self.__get_absolute_path(src_path)
+        try:
+            abs_src_path = self.__get_absolute_path(src_path)
 
-        if is_directory:
-            buffsend = "syncs|create|1|" + src_path
-            logging.info(buffsend)
-            self.sc.send(buffsend.encode('utf-8'))
+            if is_directory:
+                buffsend = "syncs|create|1|" + src_path
+                logging.info(buffsend)
+                self.sc.send(buffsend.encode('utf-8'))
 
-            buffrecv = self.sc.recv(1024)
-            buffrecv = buffrecv.decode('utf-8')
-            if (buffrecv == "directory|ok"):
-                logging.info("send directory success")
+                buffrecv = self.sc.recv(1024)
+                buffrecv = buffrecv.decode('utf-8')
+                if (buffrecv == "directory|ok"):
+                    logging.info("send directory success")
 
-        else:
-            buffsend = "syncs|create|2"
-            self.sc.send(buffsend.encode("utf-8"))
+            else:
+                buffsend = "syncs|create|2"
+                self.sc.send(buffsend.encode("utf-8"))
 
-            buffrecv = self.sc.recv(1024)
-            buffrecv = buffrecv.decode('utf-8')
-            if (buffrecv == "create|ok"):
-                logging.info("create success")
+                buffrecv = self.sc.recv(1024)
+                buffrecv = buffrecv.decode('utf-8')
+                if (buffrecv == "create|ok"):
+                    logging.info("create success")
 
-            filesize = os.path.getsize(abs_src_path)
-            while 1:
-                    try:
-                        f = open(abs_src_path, "rb")
-                        break
-                    except IOError as e:
-                        logging.info("I/O error({0}): {1}".format(e.errno, e.strerror))
-                    time.sleep(1)
-            md5 = hashlib.md5(f.read()).hexdigest()
-            f.close()
-            datasend = "syncs|filename|" + src_path + "|filesize|" + str(filesize) + "|" + md5
-
-            logging.info(datasend)
-            datalen = len(datasend)
-            while True:
-                lSend = self.sc.send(datasend.encode('utf-8'))
-                if lSend == datalen:
-                    break
-            datarecv = self.sc.recv(1024)
-            datarecv = datarecv.decode('utf-8')
-
-            logging.info(datarecv)
-            if datarecv == "syncs|ok":
+                filesize = os.path.getsize(abs_src_path)
                 while 1:
-                    try:
-                        f = open(abs_src_path, "rb")
-                        break
-                    except IOError as e:
-                        logging.info("I/O error({0}): {1}".format(e.errno, e.strerror))
-                    time.sleep(1)
-                byteSend = 0
-                while 1:
-                    if byteSend == filesize:
-                        break
-                    buff = f.read(1024)
-                    self.sc.send(buff)
-                    byteSend += len(buff)
+                        try:
+                            f = open(abs_src_path, "rb")
+                            break
+                        except IOError as e:
+                            logging.info("I/O error({0}): {1}".format(e.errno, e.strerror))
+                        time.sleep(1)
+                md5 = hashlib.md5(f.read()).hexdigest()
                 f.close()
-            logging.info("Send file success")
-        return True
+                datasend = "syncs|filename|" + src_path + "|filesize|" + str(filesize) + "|" + md5
+
+                logging.info(datasend)
+                datalen = len(datasend)
+                while True:
+                    lSend = self.sc.send(datasend.encode('utf-8'))
+                    if lSend == datalen:
+                        break
+                datarecv = self.sc.recv(1024)
+                datarecv = datarecv.decode('utf-8')
+
+                logging.info(datarecv)
+                if datarecv == "syncs|ok":
+                    while 1:
+                        try:
+                            f = open(abs_src_path, "rb")
+                            break
+                        except IOError as e:
+                            logging.info("I/O error({0}): {1}".format(e.errno, e.strerror))
+                        time.sleep(1)
+                    byteSend = 0
+                    while 1:
+                        if byteSend == filesize:
+                            break
+                        buff = f.read(1024)
+                        self.sc.send(buff)
+                        byteSend += len(buff)
+                    f.close()
+                logging.info("Send file success")
+            return True
+        except OSError as err:
+            logging.debug(err)
+            return False
 
 
 
     def on_deleted(self, src_path, is_directory):
-        buffsend = "syncs|delete|" + src_path
-        logging.info(buffsend)
-        self.sc.send(buffsend.encode("utf-8"))
+        try:
+            buffsend = "syncs|delete|" + src_path
+            logging.info(buffsend)
+            self.sc.send(buffsend.encode("utf-8"))
 
-        buffrecv = self.sc.recv(1024)
-        buffrecv = buffrecv.decode('utf-8')
-        if (buffrecv == "delete|ok"):
-            logging.info("send directory success")
-        else:
-            pass
-        return True
+            buffrecv = self.sc.recv(1024)
+            buffrecv = buffrecv.decode('utf-8')
+            if (buffrecv == "delete|ok"):
+                logging.info("send directory success")
+            
+            return True
+        except OSError as err:
+            logging.debug(err)
+            return False
 
 
     def on_modified(self, src_path, is_directory):
-        if not is_directory:
-            self.on_created(src_path, is_directory)
-        pass
-        return True
+        try:
+            if not is_directory:
+                self.on_created(src_path, is_directory)
+            return True
+        except OSError as err:
+            logging.debug(err)
+            return False
 
     def on_moved(self, src_path, dest_path, is_directory):
-        if is_directory:
-            buffsend = "syncs|moved|%s|%s|1" % (src_path, dest_path)
-        else:
-            buffsend = "syncs|moved|%s|%s|2" % (src_path, dest_path)
+        try:
+            if is_directory:
+                buffsend = "syncs|moved|%s|%s|1" % (src_path, dest_path)
+            else:
+                buffsend = "syncs|moved|%s|%s|2" % (src_path, dest_path)
 
-        logging.info(buffsend)
-        self.sc.send(buffsend.encode("utf-8"))
+            logging.info(buffsend)
+            self.sc.send(buffsend.encode("utf-8"))
 
-        buffrecv = self.sc.recv(1024)
-        buffrecv = buffrecv.decode("utf-8")
-        if (buffrecv == "moved|ok"):
-            logging.info("moved success")
-        else:
-            pass
-        pass
+            buffrecv = self.sc.recv(1024)
+            buffrecv = buffrecv.decode("utf-8")
+            if (buffrecv == "moved|ok"):
+                logging.info("moved success")
 
-        return True
+            return True
+        except OSError as err:
+            logging.debug(err)
+            return False

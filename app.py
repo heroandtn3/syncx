@@ -79,13 +79,38 @@ class MyFileHandler(monitor.FileHandler):
         if last_sync:
             # last_sync available
             # start scan file change from last_sync
-            pass
+            for data in self.sync_logger.get_not_sync_list():
+                self.__dispatch(data)
 
         else:
             logging.debug('First time start app')
             # scan all file
             for f in utils.scan_dir(self.working_dir):
                 self.on_created(f, False)
+            self.sync_logger.save_last_sync()
+
+    def __dispatch(self, data):
+        _data = data.decode().split(':')
+        operator = _data[0]
+        if operator == 'mov':
+            src_path = _data[1]
+            dest_path = _data[2]
+            is_directory = _data[3] == 'd'
+        else:
+            src_path = _data[1]
+            is_directory = _data[2] == 'd'
+        time.sleep(3)
+        sync_success = False
+        if operator == 'cre':
+            sync_success = self.on_created(src_path, is_directory)
+        elif operator == 'del':
+            sync_success = self.on_deleted(src_path, is_directory)
+        elif operator == 'mod':
+            sync_success = self.on_modified(src_path, is_directory)
+        elif operator == 'mov':
+            sync_success = self.on_moved(src_path, dest_path, is_directory)
+        if sync_success:
+            self.sync_logger.del_not_sync(data)
 
     def __on_disconnect(self):
         logging.info('Opps! Disconnected!')
@@ -94,52 +119,57 @@ class MyFileHandler(monitor.FileHandler):
 
     def on_created(self, src_path, is_directory):
         super(MyFileHandler, self).on_created(src_path, is_directory)
-        src_path = self.__remove_working_dir(src_path)
         #TODO: https://github.com/heroandtn3/syncx/issues/5
         if self.connected:
-            if self.conn.on_created(src_path, is_directory):
-                logging.info('Create successful')
-            else:
-                logging.info('Opps')
-        else:
-            self.sync_logger.save_not_sync(
+            _src_path = self.__remove_working_dir(src_path)
+            if self.conn.on_created(_src_path, is_directory):
+                self.sync_logger.save_last_sync()
+                return True
+        self.sync_logger.save_not_sync(
                 'cre:%s:%s' % (src_path, 'd' if is_directory else 'f'),
                 time.time())
+        return False
 
     def on_deleted(self, src_path, is_directory):
         super(MyFileHandler, self).on_deleted(src_path, is_directory)
-        src_path = self.__remove_working_dir(src_path)
 
         if self.connected:
-            self.conn.on_deleted(src_path, is_directory)
-        else:
-            self.sync_logger.save_not_sync(
+            _src_path = self.__remove_working_dir(src_path)
+            if self.conn.on_deleted(_src_path, is_directory):
+                self.sync_logger.save_last_sync()
+                return True
+        self.sync_logger.save_not_sync(
                 'del:%s:%s' % (src_path, 'd' if is_directory else 'f'),
                 time.time())
+        return False
 
     def on_modified(self, src_path, is_directory):
         super(MyFileHandler, self).on_modified(src_path, is_directory)
-        src_path = self.__remove_working_dir(src_path)
 
         if self.connected:
-            self.conn.on_modified(src_path, is_directory)
-        else:
-            self.sync_logger.save_not_sync(
+            _src_path = self.__remove_working_dir(src_path)
+            if self.conn.on_modified(_src_path, is_directory):
+                self.sync_logger.save_last_sync()
+                return True
+        self.sync_logger.save_not_sync(
                 'mod:%s:%s' % (src_path, 'd' if is_directory else 'f'),
                 time.time())
+        return False
 
     def on_moved(self, src_path, dest_path, is_directory):
         super(MyFileHandler, self).on_moved(src_path, dest_path, is_directory)
-        src_path = self.__remove_working_dir(src_path)
-        dest_path = self.__remove_working_dir(dest_path)
-
+        
         if self.connected:
-            self.conn.on_moved(src_path, dest_path, is_directory)
-        else:
-            self.sync_logger.save_not_sync(
+            _src_path = self.__remove_working_dir(src_path)
+            _dest_path = self.__remove_working_dir(dest_path)
+            if self.conn.on_moved(_src_path, _dest_path, is_directory):
+                self.sync_logger.save_last_sync()
+                return True
+        self.sync_logger.save_not_sync(
                 'mov:%s:%s:%s' % (src_path, dest_path,
                                   'd' if is_directory else 'f'),
                 time.time())
+        return False
 
 def try_connect(host, port):
     """

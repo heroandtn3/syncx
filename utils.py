@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 
 # 3-party modules
 import redis
@@ -31,9 +32,25 @@ class RedisSyncLogger():
             logging.debug('Redis connection error: %s', err)
             return None
 
+    def save_last_sync(self, timestamp=None):
+        if timestamp is None:
+            timestamp = time.time()
+        self.r.set('last_sync', timestamp)
+
     def save_not_sync(self, member, score):
         try:
-            return self.r.zadd('notsync', member, score)
+            return self.r.zadd('notsync', score, member)
+        except redis.exceptions.ConnectionError as err:
+            logging.debug('Redis connection error: %s', err)
+            return None
+
+    def get_not_sync_list(self):
+        for member, score in self.r.zscan_iter('notsync'):
+            yield member
+
+    def del_not_sync(self, member):
+        try:
+            return self.r.zrem('notsync', member)
         except redis.exceptions.ConnectionError as err:
             logging.debug('Redis connection error: %s', err)
             return None
