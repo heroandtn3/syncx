@@ -18,10 +18,13 @@ import utils
 import statusserver
 
 master_cfg = {
-    'host'          : '127.0.0.1',
-    'port'          : 6996,
     'working_dir'   : 'master_dir',
     'is_master'     : True,
+
+    'host'          : '0.0.0.0',
+    'port'          : 6996,
+    'remote_host'   : '127.0.0.1',
+    'remote_port'   : 6996,
     'redis_host'    : '127.0.0.1',
     'redis_port'    : 2013,
     'status_host'   : '127.0.0.1',
@@ -29,15 +32,17 @@ master_cfg = {
 }
 
 slave_cfg = {
-    'host'          : '127.0.0.1',
-    'port'          : 6996,
     'working_dir'   : 'slave_dir',
     'is_master'     : False,
+
+    'host'          : '0.0.0.0',
+    'port'          : 6996,
+    'remote_host'   : '127.0.0.1',
+    'remote_port'   : 6996,
     'redis_host'    : '127.0.0.1',
     'redis_port'    : 2014,
     'status_host'   : '127.0.0.1',
     'status_port'   : 1992,
-
 }
 
 is_RunMaster = False
@@ -51,7 +56,7 @@ class MyFileHandler(monitor.FileHandler):
     - working_dir: working directory to work on.
     """
 
-    def __init__(self, host, port, working_dir, conn, sync_logger):
+    def __init__(self, working_dir, conn, sync_logger):
         self.working_dir = working_dir
         self.conn = conn
         self.sync_logger = sync_logger
@@ -183,6 +188,7 @@ def try_connect(host, port):
             is_connect = True
     except OSError as err:
         logging.debug('No connection established, OSError: %s', err)
+        logging.info("There's no running master")
         return None
 
     sock.close()
@@ -192,20 +198,29 @@ class App():
 
     def __init__(self, config=master_cfg):
         self.config = config
-        self.host = config['host']
-        self.port = config['port']
+
         self.working_dir = config['working_dir']
         self.is_master = config['is_master']
+
+        self.host = config['host']
+        self.port = config['port']
+
+        self.remote_host = config['remote_host']
+        self.remote_port = config['remote_port']
+        
         self.redis_host = config['redis_host']
         self.redis_port = config['redis_port']
+
         self.status_host = config['status_host']
         self.status_port = config['status_port']
         
         self.sync_logger = utils.RedisSyncLogger(
             host=self.redis_host,
             port=self.redis_port)
+
         self.is_run_as_master = False
         self.name = 'MASTER' if self.is_master else 'SLAVE'
+
         self.status_server = statusserver.HttpStatusServer(
             port=self.status_port)
         self.status_server.start()
@@ -214,7 +229,7 @@ class App():
     def start(self):
         logging.info('%s starts...', self.name)
 
-        is_connect = try_connect(master_cfg['host'], master_cfg['port'])
+        is_connect = try_connect(self.remote_host, self.remote_port)
         if is_connect:
             self.run_as_slave()
         else:
@@ -227,7 +242,6 @@ class App():
             self.host, self.port, self.working_dir,
             socket_status_callback=self.socket_status_callback)
         self.handler = MyFileHandler(
-            self.host, self.port, 
             self.working_dir, conn, self.sync_logger)
         monitor.watch(self.working_dir, self.handler)
         self.status_server.set_ready(True)
@@ -236,7 +250,7 @@ class App():
         self.is_run_as_master = False
         logging.info('%s is running as slave', self.name)
         conn = ServerSyncs.SocketFileClient(
-            self.host, self.port, self.working_dir,
+            self.remote_host, self.remote_port, self.working_dir,
             socket_status_callback=self.socket_status_callback)
         conn.connect()
         self.status_server.set_ready(False)
@@ -264,19 +278,18 @@ class App():
             # detect file changes from last_sync timestamp
             last_sync = self.sync_logger.get_last_sync()
             logging.debug('Last time sync: %s', last_sync)
-            if last_sync:
-                # last_sync available
-                # start scan file change from last_sync
-                for data in self.sync_logger.get_not_sync_list():
-                    self.handler.dispatch(data)
-
-            else:
+            if not last_sync:
                 logging.debug('First time start app')
                 # scan all file
                 for src_path, is_directory in utils.scan_dir(self.working_dir):
                     self.handler.on_created(src_path, is_directory)
-            self.sync_logger.save_last_sync()
             
+            # last_sync available
+            # start scan file change from last_sync
+            for data in self.sync_logger.get_not_sync_list():
+                self.handler.dispatch(data)
+            self.sync_logger.save_last_sync()
+                
             if need_convert:
                 self.convert()
 
@@ -289,10 +302,10 @@ class App():
 
     def __on_disconnect(self):
         if self.is_run_as_master:
+            # slave is died, file changes will be saved to sync_logger
             handler.connected = False
         else:
-            # hmm, master is died, what can I do now :(
-            # so, start as master now :)
+            # hmm, master is died, so I'm gonna start as master now :)
             self.run_as_master()
 
     def convert(self):

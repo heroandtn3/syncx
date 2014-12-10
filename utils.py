@@ -26,7 +26,7 @@ class RedisSyncLogger():
         self.host = host
         self.port = port
         self.db = db
-        self.r = redis.StrictRedis(host='localhost', port=6379, db=0)
+        self.r = redis.StrictRedis(host=host, port=port, db=db)
 
     def get_last_sync(self):
         try:
